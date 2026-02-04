@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 import { Die } from './Die';
 import { Die as DieType } from '../types/dice';
 
@@ -29,7 +29,7 @@ export const DiceRoll: React.FC<DiceRollProps> = ({
   onReset,
 }) => {
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.container}>
       {/* Roll info */}
       <Text style={styles.rollInfo}>
         Roll {Math.min(rollNumber, 3)} of 3
@@ -105,14 +105,17 @@ export const DiceRoll: React.FC<DiceRollProps> = ({
           </TouchableOpacity>
         )}
       </View>
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  scrollContainer: {
     flex: 1,
+  },
+  container: {
     padding: 16,
+    paddingBottom: 40,
   },
   rollInfo: {
     fontSize: 20,

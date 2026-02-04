@@ -1,66 +1,93 @@
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View, Text, SafeAreaView } from 'react-native';
-import { DiceRoll } from './src/components';
-import { useDice } from './src/hooks';
+import { StyleSheet, View, Text } from 'react-native';
+import { GameProvider, useGame } from './src/context/GameContext';
+import { LobbyScreen } from './src/components/screens/LobbyScreen';
+import { GameScreen } from './src/components/screens/GameScreen';
+import { DiceSimulatorScreen } from './src/components/screens/DiceSimulatorScreen';
 
-export default function App() {
-  const {
-    availableDice,
-    selectedDice,
-    silverTrayDice,
-    rollNumber,
-    canRoll,
-    canSelect,
-    isTurnComplete,
-    rollDice,
-    selectDie,
-    resetTurn,
-  } = useDice();
+// Error Boundary Component
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('App Error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Something went wrong</Text>
+          <Text style={styles.errorText}>{this.state.error?.message}</Text>
+          <Text style={styles.errorHint}>Check the console for details</Text>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+function AppContent() {
+  const { currentScreen, goToLobby } = useGame();
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Clever</Text>
-        <Text style={styles.subtitle}>Dice Roller</Text>
-      </View>
+    <View style={styles.container}>
+      {currentScreen === 'lobby' && <LobbyScreen />}
+      {currentScreen === 'game' && <GameScreen />}
+      {currentScreen === 'dice_simulator' && <DiceSimulatorScreen onBack={goToLobby} />}
+      <StatusBar style="light" />
+    </View>
+  );
+}
 
-      <DiceRoll
-        availableDice={availableDice}
-        selectedDice={selectedDice}
-        silverTrayDice={silverTrayDice}
-        rollNumber={rollNumber}
-        canRoll={canRoll}
-        canSelect={canSelect}
-        isTurnComplete={isTurnComplete}
-        onSelectDie={selectDie}
-        onRoll={rollDice}
-        onReset={resetTurn}
-      />
-
-      <StatusBar style="auto" />
-    </SafeAreaView>
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <GameProvider>
+        <AppContent />
+      </GameProvider>
+    </ErrorBoundary>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#1a1a2e',
   },
-  header: {
-    paddingTop: 20,
-    paddingBottom: 10,
+  errorContainer: {
+    flex: 1,
+    backgroundColor: '#1a1a2e',
+    justifyContent: 'center',
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    padding: 20,
   },
-  title: {
-    fontSize: 28,
+  errorTitle: {
+    color: '#ff6b6b',
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    marginBottom: 16,
   },
-  subtitle: {
+  errorText: {
+    color: '#fff',
     fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  errorHint: {
     color: '#888',
+    fontSize: 12,
   },
 });

@@ -9,7 +9,7 @@ import {
   onDisconnect,
   serverTimestamp,
 } from 'firebase/database';
-import { database, ensureAuthenticated, generateRoomCode } from '../config/firebase';
+import { database, ensureAuthenticated, generateRoomCode, cleanupOldGames } from '../config/firebase';
 import {
   GameState,
   PlayerId,
@@ -142,6 +142,9 @@ export const useFirebaseGame = (): UseFirebaseGameReturn => {
     setError(null);
 
     try {
+      // Clean up old games in the background (don't await)
+      cleanupOldGames().catch(console.error);
+
       let code: string;
       let attempts = 0;
 

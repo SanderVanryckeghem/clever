@@ -60,4 +60,38 @@ export const generateRoomCode = (): string => {
   return code;
 };
 
+// Cleanup old games (older than 24 hours)
+// This runs client-side when users create/join games
+export const cleanupOldGames = async (): Promise<number> => {
+  const { ref, get, remove } = await import('firebase/database');
+
+  const gamesRef = ref(database, 'games');
+  const snapshot = await get(gamesRef);
+
+  if (!snapshot.exists()) return 0;
+
+  const games = snapshot.val();
+  const now = Date.now();
+  const maxAge = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+  let deletedCount = 0;
+
+  for (const roomCode of Object.keys(games)) {
+    const game = games[roomCode];
+    const createdAt = game.createdAt || 0;
+
+    if (now - createdAt > maxAge) {
+      try {
+        await remove(ref(database, `games/${roomCode}`));
+        deletedCount++;
+        console.log(`Cleaned up old game: ${roomCode}`);
+      } catch (err) {
+        // Ignore errors - security rules may prevent deletion
+        console.log(`Could not clean up game ${roomCode}:`, err);
+      }
+    }
+  }
+
+  return deletedCount;
+};
+
 export default app;

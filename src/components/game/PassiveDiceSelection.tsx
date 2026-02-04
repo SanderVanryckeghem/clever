@@ -7,12 +7,14 @@ interface Props {
   silverTrayDice: Die[];
   onSelectDie: (dieId: string) => void;
   disabled?: boolean;
+  hasValidMoves?: (die: Die) => boolean;
 }
 
 export const PassiveDiceSelection: React.FC<Props> = ({
   silverTrayDice,
   onSelectDie,
   disabled = false,
+  hasValidMoves,
 }) => {
   if (silverTrayDice.length === 0) {
     return (
@@ -38,20 +40,34 @@ export const PassiveDiceSelection: React.FC<Props> = ({
       </Text>
 
       <View style={styles.diceContainer}>
-        {silverTrayDice.map((die) => (
-          <DieComponent
-            key={die.id}
-            die={die}
-            onPress={() => onSelectDie(die.id)}
-            disabled={disabled}
-            size="large"
-          />
-        ))}
+        {silverTrayDice.map((die) => {
+          const canUse = hasValidMoves ? hasValidMoves(die) : true;
+          return (
+            <View key={die.id} style={styles.dieWrapper}>
+              <DieComponent
+                die={die}
+                onPress={() => onSelectDie(die.id)}
+                disabled={disabled}
+                size="large"
+              />
+              {!disabled && canUse && (
+                <View style={styles.validMoveIndicator}>
+                  <Text style={styles.validMoveText}>✓</Text>
+                </View>
+              )}
+              {!disabled && !canUse && (
+                <View style={styles.noMovesIndicator}>
+                  <Text style={styles.noMovesText}>✗</Text>
+                </View>
+              )}
+            </View>
+          );
+        })}
       </View>
 
       {!disabled && (
         <Text style={styles.hint}>
-          Tap a die to select it
+          ✓ = can be used on your scorecard, ✗ = no valid moves
         </Text>
       )}
     </View>
@@ -83,6 +99,45 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexWrap: 'wrap',
     gap: 12,
+  },
+  dieWrapper: {
+    position: 'relative',
+  },
+  validMoveIndicator: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#228B22',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#2a2a3e',
+  },
+  validMoveText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  noMovesIndicator: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#ff4444',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#2a2a3e',
+  },
+  noMovesText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   emptyContainer: {
     alignItems: 'center',

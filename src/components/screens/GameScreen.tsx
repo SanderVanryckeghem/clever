@@ -207,6 +207,7 @@ export const GameScreen: React.FC = () => {
           silverTrayDice={silverTrayDice}
           onSelectDie={handleSelectFromSilverTray}
           disabled={false}
+          hasValidMoves={hasValidMoves}
         />
       );
     }

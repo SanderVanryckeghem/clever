@@ -2,16 +2,18 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase } from 'firebase/database';
 import { getAuth, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 
-// Firebase configuration from environment variables
-// Users should create a .env.local file with these values
+// Firebase configuration
+// Note: These values are safe to expose in client-side code.
+// Security is handled by Firebase Security Rules, not by hiding config.
+// Make sure to set up proper Security Rules in Firebase Console.
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '',
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
-  databaseURL: process.env.EXPO_PUBLIC_FIREBASE_DATABASE_URL || '',
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || '',
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '',
+  apiKey: "AIzaSyC39kbzRMZFWb9cy0B-D2KGYyYgahHuFO0",
+  authDomain: "clever-f2af8.firebaseapp.com",
+  databaseURL: "https://clever-f2af8-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "clever-f2af8",
+  storageBucket: "clever-f2af8.firebasestorage.app",
+  messagingSenderId: "861420487488",
+  appId: "1:861420487488:web:36bca3d439053040a2f0a5",
 };
 
 // Initialize Firebase

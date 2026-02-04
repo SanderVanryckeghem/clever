@@ -3,6 +3,12 @@
 # dependencies
 node_modules/
 
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
 # Expo
 .expo/
 dist/

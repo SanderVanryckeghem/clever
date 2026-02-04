@@ -37,7 +37,7 @@ export const Die: React.FC<DieProps> = ({
     height: dimension,
     backgroundColor,
     borderRadius: dimension * 0.15,
-    opacity: disabled || die.isOnSilverTray ? 0.5 : 1,
+    opacity: disabled ? 0.5 : 1,
   };
 
   const handlePress = () => {

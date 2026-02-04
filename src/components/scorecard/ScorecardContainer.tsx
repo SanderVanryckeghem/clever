@@ -5,15 +5,19 @@ import { Die } from '../../types/dice';
 import { SectionType } from '../../hooks/useScorecard';
 import {
   YELLOW_GRID_VALUES,
-  BLUE_CELL_VALUES,
+  BLUE_GRID_VALUES,
   GREEN_THRESHOLDS,
   ORANGE_MULTIPLIERS,
+  GREEN_CELL_BONUSES,
+  ORANGE_CELL_BONUSES,
+  PURPLE_CELL_BONUSES,
 } from '../../constants/scorecard';
 
 interface Props {
   scorecard: Scorecard;
   selectedDie?: Die | null;
   whiteDieValue?: number;
+  blueDieValue?: number;
   onMarkPosition?: (
     section: SectionType,
     position: number | { row: number; col: number }
@@ -31,26 +35,73 @@ interface Props {
   isOpponent?: boolean;
 }
 
+// Helper to normalize an array that may have undefined values from Firebase
+const normalizeNullableArray = (arr: any, length: number): (number | null)[] => {
+  const result: (number | null)[] = Array(length).fill(null);
+  if (!arr) return result;
+  for (let i = 0; i < length; i++) {
+    const val = arr[i];
+    if (typeof val === 'number') {
+      result[i] = val;
+    }
+  }
+  return result;
+};
+
+// Helper to normalize boolean array
+const normalizeBooleanArray = (arr: any, length: number): boolean[] => {
+  const result: boolean[] = Array(length).fill(false);
+  if (!arr) return result;
+  for (let i = 0; i < length; i++) {
+    result[i] = arr[i] === true;
+  }
+  return result;
+};
+
+// Helper to normalize yellow grid (4x4)
+const normalizeYellowGrid = (grid: any): boolean[][] => {
+  const result: boolean[][] = [];
+  for (let row = 0; row < 4; row++) {
+    result[row] = [];
+    for (let col = 0; col < 4; col++) {
+      result[row][col] = grid?.[row]?.[col] === true;
+    }
+  }
+  return result;
+};
+
+// Helper to normalize blue grid (3x4)
+const normalizeBlueGrid = (grid: any): boolean[][] => {
+  const result: boolean[][] = [];
+  for (let row = 0; row < 3; row++) {
+    result[row] = [];
+    for (let col = 0; col < 4; col++) {
+      result[row][col] = grid?.[row]?.[col] === true;
+    }
+  }
+  return result;
+};
+
 // Normalize scorecard data (Firebase removes empty arrays/nulls)
 const normalizeScorecard = (sc: Scorecard): Scorecard => ({
   yellow: {
-    grid: sc.yellow?.grid || [[false, false, false, false], [false, false, false, false], [false, false, false, false], [false, false, false, false]],
+    grid: normalizeYellowGrid(sc.yellow?.grid),
     score: sc.yellow?.score || 0,
   },
   blue: {
-    cells: sc.blue?.cells || Array(11).fill(false),
+    grid: normalizeBlueGrid((sc.blue as any)?.grid),
     score: sc.blue?.score || 0,
   },
   green: {
-    values: sc.green?.values || Array(11).fill(null),
+    cells: normalizeBooleanArray((sc.green as any)?.cells, 11),
     score: sc.green?.score || 0,
   },
   orange: {
-    values: sc.orange?.values || Array(11).fill(null),
+    values: normalizeNullableArray(sc.orange?.values, 11),
     score: sc.orange?.score || 0,
   },
   purple: {
-    values: sc.purple?.values || Array(11).fill(null),
+    values: normalizeNullableArray(sc.purple?.values, 11),
     score: sc.purple?.score || 0,
   },
   bonuses: {
@@ -66,6 +117,7 @@ export const ScorecardContainer: React.FC<Props> = ({
   scorecard: rawScorecard,
   selectedDie,
   whiteDieValue,
+  blueDieValue,
   onMarkPosition,
   getValidPositions,
   onUseReroll,
@@ -80,17 +132,44 @@ export const ScorecardContainer: React.FC<Props> = ({
   // Normalize scorecard to handle Firebase's removal of empty arrays
   const scorecard = normalizeScorecard(rawScorecard);
 
-  // Get valid positions for each section
+  // Get valid positions for each section - die color must match section
+  // White die can be used with blue die or on its own for any section
   const getValidForSection = (section: SectionType) => {
     if (!selectedDie || !getValidPositions || disabled || isOpponent) {
       return [];
     }
-    const whiteValue = section === 'blue' ? whiteDieValue : undefined;
-    return getValidPositions(section, selectedDie.value, whiteValue);
+
+    const dieColor = selectedDie.color;
+
+    // Check if the die color can be used for this section
+    // In Ganz Schön Clever:
+    // - Colored dice can only be used on their matching section
+    // - White die can be used on any section (as a wild die)
+    // - Blue section uses blue die + white die sum (either die can be selected)
+    if (section === 'blue') {
+      // Blue section uses the sum of blue + white dice
+      // Can select either blue or white die
+      if (dieColor === 'blue' && whiteDieValue !== undefined) {
+        // Blue die selected, use white die value as the second value
+        return getValidPositions(section, selectedDie.value, whiteDieValue);
+      } else if (dieColor === 'white' && blueDieValue !== undefined) {
+        // White die selected, use blue die value as the first value
+        // The sum is the same, but we pass blue value + white value
+        return getValidPositions(section, blueDieValue, selectedDie.value);
+      }
+      return [];
+    }
+
+    // For other sections, die color must match OR be white
+    if (dieColor !== section && dieColor !== 'white') {
+      return [];
+    }
+
+    return getValidPositions(section, selectedDie.value);
   };
 
   const yellowValid = getValidForSection('yellow') as { row: number; col: number }[];
-  const blueValid = getValidForSection('blue') as number[];
+  const blueValid = getValidForSection('blue') as { row: number; col: number }[];
   const greenValid = getValidForSection('green') as number[];
   const orangeValid = getValidForSection('orange') as number[];
   const purpleValid = getValidForSection('purple') as number[];
@@ -101,7 +180,12 @@ export const ScorecardContainer: React.FC<Props> = ({
     setExpandedSection(null);
   };
 
-  // Render mini yellow grid
+  // Row bonus icons for yellow (right side)
+  const yellowRowBonusIcons = ['🔵', '🟠🔄', '🟢', '🦊'];
+  // Column bonus icons for yellow (bottom)
+  const yellowColBonusIcons = ['+1', '🔵', '🔄', '🟣'];
+
+  // Render mini yellow grid with row/column bonuses
   const renderYellowMini = () => {
     const grid = scorecard.yellow?.grid || [[false, false, false, false], [false, false, false, false], [false, false, false, false], [false, false, false, false]];
     return (
@@ -112,80 +196,127 @@ export const ScorecardContainer: React.FC<Props> = ({
             const value = YELLOW_GRID_VALUES[row][col];
             const isCrossed = grid[row]?.[col];
             const isValid = yellowValid.some(p => p.row === row && p.col === col);
+            const isDiagonal = value === 0;
             return (
               <TouchableOpacity
                 key={col}
                 style={[
                   styles.yellowMiniCell,
+                  isDiagonal && styles.yellowDiagonalCell,
                   isCrossed && styles.yellowMiniCellCrossed,
                   isValid && styles.cellValid,
                 ]}
                 onPress={() => isValid && handleCellPress('yellow', { row, col })}
-                disabled={!isValid}
+                disabled={!isValid || isDiagonal}
               >
                 <Text style={[styles.yellowMiniText, isCrossed && styles.crossedText]}>
-                  {isCrossed ? 'X' : (value === 0 ? '+' : value)}
+                  {isCrossed ? 'X' : (isDiagonal ? '⭐' : value)}
                 </Text>
               </TouchableOpacity>
             );
           })}
+          {/* Row bonus indicator */}
+          <View style={styles.rowBonusIndicator}>
+            <Text style={styles.bonusIconText}>{yellowRowBonusIcons[row]}</Text>
+          </View>
         </View>
       ))}
+      {/* Column bonus indicators */}
+      <View style={styles.yellowMiniRow}>
+        {[0, 1, 2, 3].map((col) => (
+          <View key={col} style={styles.colBonusIndicator}>
+            <Text style={styles.bonusIconText}>{yellowColBonusIcons[col]}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
   };
 
-  // Render mini blue row
+  // Row bonus icons for blue (right side)
+  const blueRowBonusIcons = ['🟠', '🟡', '🦊'];
+  // Column bonus icons for blue (bottom)
+  const blueColBonusIcons = ['🔄', '🟢', '🟣', '+1'];
+
+  // Render blue grid (3 rows x 4 columns) with row/column bonuses
   const renderBlueMini = () => {
-    const cells = scorecard.blue?.cells || Array(11).fill(false);
+    const grid = scorecard.blue?.grid || [[false, false, false, false], [false, false, false, false], [false, false, false, false]];
     return (
-    <View style={styles.linearRow}>
-      {BLUE_CELL_VALUES.map((value, index) => {
-        const isCrossed = cells[index];
-        const isValid = blueValid.includes(index);
-        return (
-          <TouchableOpacity
-            key={index}
-            style={[
-              styles.blueCell,
-              isCrossed && styles.blueCellCrossed,
-              isValid && styles.cellValid,
-            ]}
-            onPress={() => isValid && handleCellPress('blue', index)}
-            disabled={!isValid}
-          >
-            <Text style={[styles.cellText, isCrossed && styles.crossedText]}>
-              {isCrossed ? 'X' : value}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+    <View style={styles.blueGrid}>
+      {[0, 1, 2].map((row) => (
+        <View key={row} style={styles.blueGridRow}>
+          {[0, 1, 2, 3].map((col) => {
+            const value = BLUE_GRID_VALUES[row][col];
+            // Skip empty cells (value 0)
+            if (value === 0) {
+              return <View key={col} style={styles.blueCellEmpty} />;
+            }
+            const isCrossed = grid[row]?.[col];
+            const isValid = blueValid.some(p => p.row === row && p.col === col);
+            return (
+              <TouchableOpacity
+                key={col}
+                style={[
+                  styles.blueCell,
+                  isCrossed && styles.blueCellCrossed,
+                  isValid && styles.cellValid,
+                ]}
+                onPress={() => isValid && handleCellPress('blue', { row, col })}
+                disabled={!isValid}
+              >
+                <Text style={[styles.cellText, isCrossed && styles.crossedText]}>
+                  {isCrossed ? 'X' : value}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+          {/* Row bonus indicator */}
+          <View style={styles.rowBonusIndicator}>
+            <Text style={styles.bonusIconText}>{blueRowBonusIcons[row]}</Text>
+          </View>
+        </View>
+      ))}
+      {/* Column bonus indicators */}
+      <View style={styles.blueGridRow}>
+        {[0, 1, 2, 3].map((col) => (
+          <View key={col} style={[styles.colBonusIndicator, BLUE_GRID_VALUES[2][col] === 0 && styles.colBonusEmpty]}>
+            <Text style={styles.bonusIconText}>{BLUE_GRID_VALUES[2][col] !== 0 ? blueColBonusIcons[col] : ''}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   );
   };
 
-  // Render mini green row
+  // Render green row (X marks like yellow/blue)
   const renderGreenMini = () => {
-    const greenValues = scorecard.green?.values || Array(11).fill(null);
+    const greenCells = scorecard.green?.cells || Array(11).fill(false);
     return (
     <View style={styles.linearRow}>
       {GREEN_THRESHOLDS.map((threshold, index) => {
-        const value = greenValues[index];
-        const isFilled = value !== null;
+        const isCrossed = greenCells[index];
         const isValid = greenValid.includes(index);
+        const hasBonus = GREEN_CELL_BONUSES[index];
         return (
           <TouchableOpacity
             key={index}
             style={[
               styles.greenCell,
-              isFilled && styles.greenCellFilled,
+              isCrossed && styles.greenCellFilled,
               isValid && styles.cellValid,
             ]}
             onPress={() => isValid && handleCellPress('green', index)}
             disabled={!isValid}
           >
-            <Text style={styles.thresholdText}>{threshold}+</Text>
-            {isFilled && <Text style={styles.cellValueText}>{value}</Text>}
+            <Text style={styles.thresholdText}>{'>='}{threshold}</Text>
+            <Text style={[styles.cellText, isCrossed && styles.crossedText]}>
+              {isCrossed ? 'X' : '-'}
+            </Text>
+            {hasBonus && !isCrossed && (
+              <Text style={styles.bonusIndicator}>
+                {hasBonus.type === 'fox' ? '🦊' : hasBonus.type === 'reroll' ? '🔄' : hasBonus.type === 'plusOne' ? '+1' : '●'}
+              </Text>
+            )}
           </TouchableOpacity>
         );
       })}
@@ -202,6 +333,7 @@ export const ScorecardContainer: React.FC<Props> = ({
         const value = orangeValues[index];
         const isFilled = value !== null;
         const isValid = orangeValid.includes(index);
+        const hasBonus = ORANGE_CELL_BONUSES[index];
         return (
           <TouchableOpacity
             key={index}
@@ -215,6 +347,11 @@ export const ScorecardContainer: React.FC<Props> = ({
           >
             {mult > 1 && <Text style={styles.multiplierText}>{mult}x</Text>}
             <Text style={styles.cellValueText}>{isFilled ? value : '-'}</Text>
+            {hasBonus && !isFilled && (
+              <Text style={styles.bonusIndicator}>
+                {hasBonus.type === 'fox' ? '🦊' : hasBonus.type === 'reroll' ? '🔄' : hasBonus.type === 'plusOne' ? '+1' : '●'}
+              </Text>
+            )}
           </TouchableOpacity>
         );
       })}
@@ -230,6 +367,7 @@ export const ScorecardContainer: React.FC<Props> = ({
       {purpleValues.map((value, index) => {
         const isFilled = value !== null;
         const isValid = purpleValid.includes(index);
+        const hasBonus = PURPLE_CELL_BONUSES[index];
         return (
           <TouchableOpacity
             key={index}
@@ -242,6 +380,11 @@ export const ScorecardContainer: React.FC<Props> = ({
             disabled={!isValid}
           >
             <Text style={styles.cellValueText}>{isFilled ? value : '-'}</Text>
+            {hasBonus && !isFilled && (
+              <Text style={styles.bonusIndicator}>
+                {hasBonus.type === 'fox' ? '🦊' : hasBonus.type === 'reroll' ? '🔄' : hasBonus.type === 'plusOne' ? '+1' : '●'}
+              </Text>
+            )}
           </TouchableOpacity>
         );
       })}
@@ -289,7 +432,8 @@ export const ScorecardContainer: React.FC<Props> = ({
         <View style={styles.selectedDieContainer}>
           <Text style={styles.selectedDieLabel}>
             Using: {selectedDie.color.toUpperCase()} die = {selectedDie.value}
-            {selectedDie.color === 'blue' && whiteDieValue && ` (+ white ${whiteDieValue} = ${selectedDie.value + whiteDieValue})`}
+            {selectedDie.color === 'blue' && whiteDieValue !== undefined && ` (+ white ${whiteDieValue} = ${selectedDie.value + whiteDieValue})`}
+            {selectedDie.color === 'white' && blueDieValue !== undefined && ` (+ blue ${blueDieValue} = ${selectedDie.value + blueDieValue})`}
           </Text>
         </View>
       )}
@@ -474,10 +618,35 @@ const styles = StyleSheet.create({
   yellowMiniCellCrossed: {
     backgroundColor: '#8B7500',
   },
+  yellowDiagonalCell: {
+    backgroundColor: '#DAA520',
+  },
   yellowMiniText: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#000',
+  },
+
+  // Row and column bonus indicators
+  rowBonusIndicator: {
+    width: 36,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  colBonusIndicator: {
+    width: 44,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    margin: 2,
+  },
+  colBonusEmpty: {
+    opacity: 0,
+  },
+  bonusIconText: {
+    fontSize: 12,
   },
 
   // Linear rows
@@ -486,16 +655,28 @@ const styles = StyleSheet.create({
     gap: 4,
   },
 
-  // Blue cells
+  // Blue grid (3x4)
+  blueGrid: {
+    alignSelf: 'center',
+  },
+  blueGridRow: {
+    flexDirection: 'row',
+  },
   blueCell: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     backgroundColor: '#4169E1',
+    margin: 2,
     borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#2A4B9B',
+  },
+  blueCellEmpty: {
+    width: 44,
+    height: 44,
+    margin: 2,
   },
   blueCellCrossed: {
     backgroundColor: '#2A4B9B',
@@ -572,6 +753,13 @@ const styles = StyleSheet.create({
   cellValid: {
     borderColor: '#00FF00',
     borderWidth: 3,
+  },
+  bonusIndicator: {
+    fontSize: 8,
+    color: '#FFD700',
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
   },
 
   // Bonuses

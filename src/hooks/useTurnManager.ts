@@ -53,21 +53,25 @@ export const useTurnManager = (): UseTurnManagerReturn => {
       d => !d.isSelected && !d.isOnSilverTray
     );
 
-    // Can roll? Must be active player, in rolling phase, have rolls remaining, and have available dice
+    // Can roll? Active player can roll in selecting or marking phase if they have rolls remaining
     const rollNumber = diceState?.rollNumber || 1;
     const canRoll = isActivePlayer &&
-                    phase === 'rolling' &&
+                    (phase === 'selecting' || phase === 'marking') &&
                     rollNumber <= MAX_ROLLS &&
                     availableDice.length > 0;
 
-    // Can select? Must be in selecting phase with selections remaining and available dice
+    // Can select? Active player can select in selecting or marking phase with selections remaining
+    // After selecting a die, player must roll before selecting again (unless no rolls left)
+    const mustRollFirst = diceState?.mustRollBeforeSelect === true && rollNumber <= MAX_ROLLS;
     const canSelect = isActivePlayer &&
-                      phase === 'selecting' &&
+                      (phase === 'selecting' || phase === 'marking') &&
                       selectionsRemaining > 0 &&
-                      availableDice.length > 0;
+                      availableDice.length > 0 &&
+                      !mustRollFirst;
 
-    // Can end turn?
-    const canEndTurn = (isActivePlayer && phase === 'marking') ||
+    // Can end turn? Active player can end when they've selected at least one die
+    const hasSelectedDice = selectionsMade > 0;
+    const canEndTurn = (isActivePlayer && phase === 'marking' && hasSelectedDice) ||
                        (!isActivePlayer && phase === 'passive_turn');
 
     // Must select from silver tray? (passive player)

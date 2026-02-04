@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useCallback, useMemo, useState, ReactNode } from 'react';
 import { useFirebaseGame } from '../hooks/useFirebaseGame';
 import { useScorecard, SectionType } from '../hooks/useScorecard';
 import { useTurnManager } from '../hooks/useTurnManager';
@@ -13,28 +13,86 @@ import {
 } from '../types/game';
 import { Die } from '../types/dice';
 
+// Helper to normalize an array that may have undefined values from Firebase
+// Firebase converts null to undefined and may store sparse arrays as objects
+const normalizeNullableArray = (arr: any, length: number): (number | null)[] => {
+  const result: (number | null)[] = Array(length).fill(null);
+  if (!arr) return result;
+
+  // Handle both array and object (Firebase sparse array) formats
+  for (let i = 0; i < length; i++) {
+    const val = arr[i];
+    // Only set if it's a valid number (not undefined, not null)
+    if (typeof val === 'number') {
+      result[i] = val;
+    }
+  }
+  return result;
+};
+
+// Helper to normalize boolean array
+const normalizeBooleanArray = (arr: any, length: number): boolean[] => {
+  const result: boolean[] = Array(length).fill(false);
+  if (!arr) return result;
+
+  for (let i = 0; i < length; i++) {
+    result[i] = arr[i] === true;
+  }
+  return result;
+};
+
+// Helper to normalize yellow grid (4x4 boolean array)
+const normalizeYellowGrid = (grid: any): boolean[][] => {
+  const defaultGrid = [[false, false, false, false], [false, false, false, false], [false, false, false, false], [false, false, false, false]];
+  if (!grid) return defaultGrid;
+
+  const result: boolean[][] = [];
+  for (let row = 0; row < 4; row++) {
+    result[row] = [];
+    for (let col = 0; col < 4; col++) {
+      result[row][col] = grid[row]?.[col] === true;
+    }
+  }
+  return result;
+};
+
+// Helper to normalize blue grid (3x4 boolean array)
+const normalizeBlueGrid = (grid: any): boolean[][] => {
+  const defaultGrid = [[false, false, false, false], [false, false, false, false], [false, false, false, false]];
+  if (!grid) return defaultGrid;
+
+  const result: boolean[][] = [];
+  for (let row = 0; row < 3; row++) {
+    result[row] = [];
+    for (let col = 0; col < 4; col++) {
+      result[row][col] = grid[row]?.[col] === true;
+    }
+  }
+  return result;
+};
+
 // Normalize scorecard from Firebase (handles missing arrays/nulls)
 const normalizeScorecard = (sc: Scorecard | null | undefined): Scorecard | null => {
   if (!sc) return null;
   return {
     yellow: {
-      grid: sc.yellow?.grid || [[false, false, false, false], [false, false, false, false], [false, false, false, false], [false, false, false, false]],
+      grid: normalizeYellowGrid(sc.yellow?.grid),
       score: sc.yellow?.score || 0,
     },
     blue: {
-      cells: sc.blue?.cells || Array(11).fill(false),
+      grid: normalizeBlueGrid((sc.blue as any)?.grid),
       score: sc.blue?.score || 0,
     },
     green: {
-      values: sc.green?.values || Array(11).fill(null),
+      cells: normalizeBooleanArray((sc.green as any)?.cells, 11),
       score: sc.green?.score || 0,
     },
     orange: {
-      values: sc.orange?.values || Array(11).fill(null),
+      values: normalizeNullableArray(sc.orange?.values, 11),
       score: sc.orange?.score || 0,
     },
     purple: {
-      values: sc.purple?.values || Array(11).fill(null),
+      values: normalizeNullableArray(sc.purple?.values, 11),
       score: sc.purple?.score || 0,
     },
     bonuses: {
@@ -48,11 +106,13 @@ const normalizeScorecard = (sc: Scorecard | null | undefined): Scorecard | null 
 };
 
 // Screen types for navigation
-export type Screen = 'lobby' | 'game';
+export type Screen = 'lobby' | 'game' | 'dice_simulator';
 
 interface GameContextValue {
   // Navigation
   currentScreen: Screen;
+  goToDiceSimulator: () => void;
+  goToLobby: () => void;
 
   // Firebase state
   gameState: GameState | null;
@@ -83,6 +143,7 @@ interface GameContextValue {
   availableDice: Die[];
   silverTrayDice: Die[];
   selectedDice: Die[];
+  mustRollBeforeSelect: boolean;
 
   // Actions
   createGame: (playerName: string) => Promise<string>;
@@ -132,13 +193,30 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
   const turnManager = useTurnManager();
   const multiplayerDice = useMultiplayerDice();
 
-  // Current screen based on game state
+  // Manual screen override for non-game screens
+  const [manualScreen, setManualScreen] = useState<Screen | null>(null);
+
+  // Current screen based on game state or manual override
   const currentScreen: Screen = useMemo(() => {
+    // Manual screen takes priority (for dice simulator)
+    if (manualScreen) {
+      return manualScreen;
+    }
     if (!firebase.gameState || firebase.gameState.phase === 'lobby') {
       return 'lobby';
     }
     return 'game';
-  }, [firebase.gameState]);
+  }, [firebase.gameState, manualScreen]);
+
+  // Navigation functions
+  const goToDiceSimulator = useCallback(() => {
+    setManualScreen('dice_simulator');
+  }, []);
+
+  const goToLobby = useCallback(() => {
+    setManualScreen(null);
+    firebase.disconnect();
+  }, [firebase]);
 
   // Derived state
   const turnInfo = useMemo(() => {
@@ -189,6 +267,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
       dice: ds.dice || [],
       silverTray: ds.silverTray || [],
       selectedDice: ds.selectedDice || [],
+      mustRollBeforeSelect: ds.mustRollBeforeSelect === true,
     };
   }, [firebase.gameState?.diceState]);
 
@@ -222,17 +301,19 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
       return;
     }
 
-    // Initialize dice and start rolling phase
+    // Initialize dice (already rolled) and start selecting phase
+    // The dice are pre-rolled, so player can immediately select or choose to re-roll
     const initialDice = createInitialDice();
     const initialDiceState: DiceState = {
       dice: initialDice,
       rollNumber: 1,
       silverTray: [],
       selectedDice: [],
+      mustRollBeforeSelect: false,
     };
 
     await firebase.updateDiceState(initialDiceState);
-    await firebase.updatePhase('rolling');
+    await firebase.updatePhase('selecting'); // Start in selecting phase since dice are already rolled
   }, [firebase]);
 
   // Roll dice
@@ -243,10 +324,11 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
     const newDiceState = multiplayerDice.rollDice(diceState);
     await firebase.updateDiceState(newDiceState);
 
-    // Move to selecting phase after roll
+    // Move to selecting phase after roll (if not already in marking phase)
     if (firebase.gameState.phase === 'rolling') {
       await firebase.updatePhase('selecting');
     }
+    // If in marking phase, stay in marking phase (player is re-rolling remaining dice)
   }, [firebase, diceState, turnInfo, multiplayerDice]);
 
   // Select a die (active player)
@@ -257,13 +339,9 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
     const newDiceState = multiplayerDice.selectDie(diceState, dieId);
     await firebase.updateDiceState(newDiceState);
 
-    // Check if we should move to marking phase
-    if (
-      newDiceState.selectedDice.length >= 3 ||
-      multiplayerDice.getAvailableDice(newDiceState).length === 0
-    ) {
-      await firebase.updatePhase('marking');
-    }
+    // Move to marking phase to allow marking the scorecard
+    // Player can still roll/select more after marking
+    await firebase.updatePhase('marking');
   }, [firebase, diceState, turnInfo, multiplayerDice]);
 
   // Select from silver tray (passive player)
@@ -378,6 +456,8 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
   const value: GameContextValue = {
     // Navigation
     currentScreen,
+    goToDiceSimulator,
+    goToLobby,
 
     // Firebase state
     gameState: firebase.gameState,
@@ -408,6 +488,7 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
     availableDice,
     silverTrayDice,
     selectedDice,
+    mustRollBeforeSelect: diceState?.mustRollBeforeSelect ?? false,
 
     // Actions
     createGame: firebase.createGame,

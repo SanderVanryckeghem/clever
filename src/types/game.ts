@@ -20,17 +20,17 @@ export interface YellowSection {
   score: number;
 }
 
-// Blue section: Cross off cells matching blue+white sum (2-12)
-// Fixed pattern of values 2-12
+// Blue section: 4x3 grid, cross off cells matching blue+white sum (2-12)
+// Grid layout with specific values in each cell
 export interface BlueSection {
-  cells: boolean[]; // 11 cells representing sums 2-12
+  grid: boolean[][]; // 3 rows x 4 columns grid of crossed-off cells
   score: number;
 }
 
 // Green section: Sequential cells with minimum thresholds
-// Each cell must have value >= threshold
+// Cross off cells (X marks) when die value >= threshold
 export interface GreenSection {
-  values: (number | null)[]; // 11 cells, null = not filled
+  cells: boolean[]; // 11 cells, marked with X when used
   score: number;
 }
 
@@ -74,9 +74,10 @@ export interface Scorecard {
 // Dice state in a game
 export interface DiceState {
   dice: Die[];
-  rollNumber: 1 | 2 | 3;
+  rollNumber: 1 | 2 | 3 | 4; // 4 means no more rolls available
   silverTray: Die[];
   selectedDice: Die[];
+  mustRollBeforeSelect: boolean; // True after selecting a die, requires roll before next selection
 }
 
 // Complete game state stored in Firebase
@@ -110,11 +111,15 @@ export const createInitialScorecard = (): Scorecard => ({
     score: 0,
   },
   blue: {
-    cells: Array(11).fill(false),
+    grid: [
+      [false, false, false, false],
+      [false, false, false, false],
+      [false, false, false, false],
+    ],
     score: 0,
   },
   green: {
-    values: Array(11).fill(null),
+    cells: Array(11).fill(false),
     score: 0,
   },
   orange: {
@@ -146,6 +151,7 @@ export const createInitialDiceState = (): DiceState => ({
   rollNumber: 1,
   silverTray: [],
   selectedDice: [],
+  mustRollBeforeSelect: false,
 });
 
 // Create initial game state

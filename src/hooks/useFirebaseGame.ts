@@ -349,12 +349,13 @@ export const useFirebaseGame = (): UseFirebaseGameReturn => {
       rollNumber: 1,
       silverTray: [],
       selectedDice: [],
+      mustRollBeforeSelect: false,
     };
 
     await update(ref(database, `games/${roomCode}`), {
       activePlayerId: nextActive,
       currentRound: newRound,
-      phase: 'rolling',
+      phase: 'selecting', // Start in selecting since dice are already rolled
       diceState: newDiceState,
       lastUpdatedAt: Date.now(),
     });

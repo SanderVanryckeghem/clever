@@ -11,10 +11,16 @@ import {
 } from '../types/game';
 import {
   YELLOW_GRID_VALUES,
-  BLUE_CELL_VALUES,
+  BLUE_GRID_VALUES,
   GREEN_THRESHOLDS,
   ORANGE_MULTIPLIERS,
-  BONUS_POSITIONS,
+  YELLOW_ROW_BONUSES,
+  YELLOW_COLUMN_BONUSES,
+  BLUE_ROW_BONUSES,
+  BLUE_COLUMN_BONUSES,
+  GREEN_CELL_BONUSES,
+  ORANGE_CELL_BONUSES,
+  PURPLE_CELL_BONUSES,
   calculateYellowScore,
   calculateBlueScore,
   calculateGreenScore,
@@ -91,12 +97,14 @@ export const useScorecard = (): UseScorecardReturn => {
         return canMarkYellow(scorecard.yellow.grid, position.row, position.col, dieValue);
       }
       case 'blue': {
-        if (typeof position !== 'number' || whiteValue === undefined) return false;
-        return canMarkBlue(scorecard.blue.cells, position, dieValue, whiteValue);
+        // Blue now uses grid position { row, col }
+        if (typeof position !== 'object' || whiteValue === undefined) return false;
+        return canMarkBlue(scorecard.blue.grid, position.row, position.col, dieValue, whiteValue);
       }
       case 'green': {
+        // Green now uses boolean cells (X marks)
         if (typeof position !== 'number') return false;
-        return canMarkGreen(scorecard.green.values, position, dieValue);
+        return canMarkGreen(scorecard.green.cells, position, dieValue);
       }
       case 'orange': {
         if (typeof position !== 'number') return false;
@@ -132,18 +140,23 @@ export const useScorecard = (): UseScorecardReturn => {
         break;
       }
       case 'blue': {
+        // Blue now uses grid - find matching sum positions
         if (whiteValue !== undefined) {
-          for (let i = 0; i < BLUE_CELL_VALUES.length; i++) {
-            if (canMarkBlue(scorecard.blue.cells, i, dieValue, whiteValue)) {
-              validPositions.push(i);
+          const sum = dieValue + whiteValue;
+          for (let row = 0; row < 3; row++) {
+            for (let col = 0; col < 4; col++) {
+              if (canMarkBlue(scorecard.blue.grid, row, col, dieValue, whiteValue)) {
+                validPositions.push({ row, col });
+              }
             }
           }
         }
         break;
       }
       case 'green': {
+        // Green now uses boolean cells
         for (let i = 0; i < GREEN_THRESHOLDS.length; i++) {
-          if (canMarkGreen(scorecard.green.values, i, dieValue)) {
+          if (canMarkGreen(scorecard.green.cells, i, dieValue)) {
             validPositions.push(i);
             break; // Only one valid position in sequential sections
           }
@@ -178,6 +191,12 @@ export const useScorecard = (): UseScorecardReturn => {
     scorecard: Scorecard,
     section: 'green' | 'orange' | 'purple'
   ): number | null => {
+    if (section === 'green') {
+      // Green uses boolean cells
+      const nextIndex = scorecard.green.cells.findIndex(c => !c);
+      return nextIndex === -1 ? null : nextIndex;
+    }
+    // Orange and purple use values
     const values = scorecard[section].values;
     const nextIndex = values.findIndex(v => v === null);
     return nextIndex === -1 ? null : nextIndex;
@@ -187,7 +206,8 @@ export const useScorecard = (): UseScorecardReturn => {
   const checkBonuses = useCallback((
     section: SectionType,
     position: number | { row: number; col: number },
-    grid?: boolean[][]
+    yellowGrid?: boolean[][],
+    blueGrid?: boolean[][]
   ): {
     reroll?: boolean;
     plusOne?: boolean;
@@ -201,36 +221,57 @@ export const useScorecard = (): UseScorecardReturn => {
       fox?: boolean;
     } = {};
 
-    if (section === 'yellow' && typeof position === 'object') {
-      // Check yellow grid bonuses
+    if (section === 'yellow' && typeof position === 'object' && yellowGrid) {
       const { row, col } = position;
 
-      // Check row completion
-      if (grid && grid[row].every(cell => cell)) {
-        // Row completed - could trigger bonuses
+      // Check row completion - bonuses from YELLOW_ROW_BONUSES
+      if (yellowGrid[row].every(cell => cell)) {
+        const rowBonus = YELLOW_ROW_BONUSES[row];
+        if (rowBonus.type === 'reroll') bonuses.reroll = true;
+        if (rowBonus.type === 'plusOne') bonuses.plusOne = true;
+        if (rowBonus.type === 'fox') bonuses.fox = true;
       }
 
-      // Check column completion
-      if (grid && grid.every(r => r[col])) {
-        // Column completed - could trigger bonuses
+      // Check column completion - bonuses from YELLOW_COLUMN_BONUSES
+      if (yellowGrid.every(r => r[col])) {
+        const colBonus = YELLOW_COLUMN_BONUSES[col];
+        if (colBonus.type === 'reroll') bonuses.reroll = true;
+        if (colBonus.type === 'plusOne') bonuses.plusOne = true;
       }
-    } else if (typeof position === 'number' && section !== 'yellow') {
+    } else if (section === 'blue' && typeof position === 'object' && blueGrid) {
+      const { row, col } = position;
+
+      // Check row completion in blue
+      const rowCells = [0, 1, 2, 3].filter(c => BLUE_GRID_VALUES[row][c] !== 0);
+      if (rowCells.every(c => blueGrid[row][c])) {
+        const rowBonus = BLUE_ROW_BONUSES[row];
+        if (rowBonus.type === 'fox') bonuses.fox = true;
+      }
+
+      // Check column completion in blue
+      const colCells = [0, 1, 2].filter(r => BLUE_GRID_VALUES[r][col] !== 0);
+      if (colCells.every(r => blueGrid[r][col])) {
+        const colBonus = BLUE_COLUMN_BONUSES[col];
+        if (colBonus.type === 'reroll') bonuses.reroll = true;
+        if (colBonus.type === 'plusOne') bonuses.plusOne = true;
+      }
+    } else if (typeof position === 'number') {
       // Check linear section bonuses
-      const sectionBonuses = BONUS_POSITIONS[section];
+      let cellBonus: { type: string; value?: any } | undefined;
 
-      if (sectionBonuses.reroll.includes(position)) {
-        bonuses.reroll = true;
+      if (section === 'green') {
+        cellBonus = GREEN_CELL_BONUSES[position];
+      } else if (section === 'orange') {
+        cellBonus = ORANGE_CELL_BONUSES[position];
+      } else if (section === 'purple') {
+        cellBonus = PURPLE_CELL_BONUSES[position];
       }
-      if (sectionBonuses.plusOne.includes(position)) {
-        bonuses.plusOne = true;
-      }
-      if (sectionBonuses.fox.includes(position)) {
-        bonuses.fox = true;
-      }
-      for (const [diceColor, positions] of Object.entries(sectionBonuses.extraDice)) {
-        if ((positions as number[]).includes(position)) {
-          bonuses.extraDice = diceColor as SectionType;
-        }
+
+      if (cellBonus) {
+        if (cellBonus.type === 'reroll') bonuses.reroll = true;
+        if (cellBonus.type === 'plusOne') bonuses.plusOne = true;
+        if (cellBonus.type === 'fox') bonuses.fox = true;
+        // Note: extraDice and cross-section bonuses would need more complex handling
       }
     }
 
@@ -266,15 +307,20 @@ export const useScorecard = (): UseScorecardReturn => {
         break;
       }
       case 'blue': {
-        if (typeof position !== 'number') break;
-        newScorecard.blue.cells[position] = true;
-        newScorecard.blue.score = calculateBlueScore(newScorecard.blue.cells);
+        // Blue now uses grid
+        if (typeof position !== 'object') break;
+        if (!newScorecard.blue.grid[position.row]) {
+          newScorecard.blue.grid[position.row] = [false, false, false, false];
+        }
+        newScorecard.blue.grid[position.row][position.col] = true;
+        newScorecard.blue.score = calculateBlueScore(newScorecard.blue.grid);
         break;
       }
       case 'green': {
+        // Green now uses boolean cells (X marks)
         if (typeof position !== 'number') break;
-        newScorecard.green.values[position] = dieValue;
-        newScorecard.green.score = calculateGreenScore(newScorecard.green.values);
+        newScorecard.green.cells[position] = true;
+        newScorecard.green.score = calculateGreenScore(newScorecard.green.cells);
         break;
       }
       case 'orange': {
@@ -295,7 +341,8 @@ export const useScorecard = (): UseScorecardReturn => {
     const bonusesEarned = checkBonuses(
       section,
       position,
-      section === 'yellow' ? newScorecard.yellow.grid : undefined
+      section === 'yellow' ? newScorecard.yellow.grid : undefined,
+      section === 'blue' ? newScorecard.blue.grid : undefined
     );
 
     // Apply bonuses to scorecard
@@ -334,8 +381,8 @@ export const useScorecard = (): UseScorecardReturn => {
     const newScorecard: Scorecard = JSON.parse(JSON.stringify(scorecard));
 
     newScorecard.yellow.score = calculateYellowScore(newScorecard.yellow.grid);
-    newScorecard.blue.score = calculateBlueScore(newScorecard.blue.cells);
-    newScorecard.green.score = calculateGreenScore(newScorecard.green.values);
+    newScorecard.blue.score = calculateBlueScore(newScorecard.blue.grid);
+    newScorecard.green.score = calculateGreenScore(newScorecard.green.cells);
     newScorecard.orange.score = calculateOrangeScore(newScorecard.orange.values);
     newScorecard.purple.score = calculatePurpleScore(newScorecard.purple.values);
 

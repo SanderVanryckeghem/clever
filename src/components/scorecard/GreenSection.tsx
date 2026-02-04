@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { GreenSection as GreenSectionType } from '../../types/game';
-import { GREEN_THRESHOLDS, GREEN_SCORING } from '../../constants/scorecard';
+import { GREEN_THRESHOLDS, GREEN_SCORING, GREEN_CELL_BONUSES } from '../../constants/scorecard';
 
 interface Props {
   section: GreenSectionType;
@@ -23,40 +23,46 @@ export const GreenSection: React.FC<Props> = ({
   };
 
   const getNextPosition = (): number => {
-    const values = section?.values || [];
-    return values.findIndex((v) => v === null);
+    const cells = section?.cells || [];
+    return cells.findIndex((c) => !c);
   };
 
   const renderCell = (position: number) => {
     const threshold = GREEN_THRESHOLDS[position];
-    const sectionValues = section?.values || [];
-    const value = sectionValues[position];
-    const isFilled = value !== null;
+    const sectionCells = section?.cells || [];
+    const isCrossed = sectionCells[position] || false;
     const isValid = isValidPosition(position);
     const isNext = position === getNextPosition();
+    const hasBonus = GREEN_CELL_BONUSES[position];
 
     return (
       <TouchableOpacity
         key={position}
         style={[
           styles.cell,
-          isFilled && styles.cellFilled,
+          isCrossed && styles.cellFilled,
           isValid && !disabled && styles.cellValid,
-          isNext && !isFilled && styles.cellNext,
+          isNext && !isCrossed && styles.cellNext,
         ]}
         onPress={() => !disabled && isValid && onCellPress?.(position)}
         disabled={disabled || !isValid}
       >
-        <Text style={styles.thresholdText}>{threshold}+</Text>
-        {isFilled && <Text style={styles.valueText}>{value}</Text>}
+        <Text style={styles.thresholdText}>{'>='}{threshold}</Text>
+        <Text style={[styles.valueText, isCrossed && styles.crossedText]}>
+          {isCrossed ? 'X' : '-'}
+        </Text>
+        {hasBonus && !isCrossed && (
+          <Text style={styles.bonusIndicator}>
+            {hasBonus.type === 'fox' ? '🦊' : hasBonus.type === 'reroll' ? '🔄' : hasBonus.type === 'plusOne' ? '+1' : '●'}
+          </Text>
+        )}
       </TouchableOpacity>
     );
   };
 
   // Calculate current score based on filled cells
-  const values = section?.values || [];
-  const filledCount = values.filter((v) => v !== null).length;
-  const nextPoints = filledCount < GREEN_SCORING.length ? GREEN_SCORING[filledCount + 1] : 0;
+  const cells = section?.cells || [];
+  const filledCount = cells.filter((c) => c).length;
 
   return (
     <View style={styles.container}>
@@ -96,7 +102,7 @@ export const GreenSection: React.FC<Props> = ({
       </View>
 
       <Text style={styles.hint}>
-        Fill sequentially. Die value must be {'>='} threshold shown.
+        Fill sequentially with X. Die value must be {'>='} threshold shown.
       </Text>
     </View>
   );
@@ -136,6 +142,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#145214',
+    position: 'relative',
   },
   cellFilled: {
     backgroundColor: '#145214',
@@ -149,7 +156,7 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   thresholdText: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#90EE90',
     marginBottom: 2,
   },
@@ -157,6 +164,16 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
+  },
+  crossedText: {
+    color: '#FFD700',
+  },
+  bonusIndicator: {
+    fontSize: 8,
+    color: '#FFD700',
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
   },
   scoringRow: {
     flexDirection: 'row',

@@ -1,12 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { BlueSection as BlueSectionType } from '../../types/game';
-import { BLUE_CELL_VALUES } from '../../constants/scorecard';
+import { BLUE_GRID_VALUES } from '../../constants/scorecard';
 
 interface Props {
   section: BlueSectionType;
-  onCellPress?: (position: number) => void;
-  validPositions?: number[];
+  onCellPress?: (position: { row: number; col: number }) => void;
+  validPositions?: { row: number; col: number }[];
   disabled?: boolean;
 }
 
@@ -16,30 +16,33 @@ export const BlueSection: React.FC<Props> = ({
   validPositions = [],
   disabled = false,
 }) => {
-  const isValidPosition = (position: number): boolean => {
-    return validPositions.includes(position);
+  const isValidPosition = (row: number, col: number): boolean => {
+    return validPositions.some(p => p.row === row && p.col === col);
   };
 
-  const renderCell = (position: number) => {
-    const value = BLUE_CELL_VALUES[position];
-    const isCrossed = section.cells[position];
-    const isValid = isValidPosition(position);
+  const renderCell = (row: number, col: number) => {
+    const value = BLUE_GRID_VALUES[row][col];
+    // Skip empty cells
+    if (value === 0) {
+      return <View key={col} style={styles.cellEmpty} />;
+    }
+    const isCrossed = section.grid[row]?.[col] || false;
+    const isValid = isValidPosition(row, col);
 
     return (
       <TouchableOpacity
-        key={position}
+        key={col}
         style={[
           styles.cell,
           isCrossed && styles.cellCrossed,
           isValid && !disabled && styles.cellValid,
         ]}
-        onPress={() => !disabled && isValid && onCellPress?.(position)}
+        onPress={() => !disabled && isValid && onCellPress?.({ row, col })}
         disabled={disabled || !isValid}
       >
         <Text style={[styles.cellValue, isCrossed && styles.cellValueCrossed]}>
-          {value}
+          {isCrossed ? 'X' : value}
         </Text>
-        {isCrossed && <Text style={styles.crossMark}>X</Text>}
       </TouchableOpacity>
     );
   };
@@ -51,13 +54,13 @@ export const BlueSection: React.FC<Props> = ({
         <Text style={styles.score}>Score: {section.score}</Text>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.cellsContainer}
-      >
-        {BLUE_CELL_VALUES.map((_, index) => renderCell(index))}
-      </ScrollView>
+      <View style={styles.grid}>
+        {[0, 1, 2].map((row) => (
+          <View key={row} style={styles.row}>
+            {[0, 1, 2, 3].map((col) => renderCell(row, col))}
+          </View>
+        ))}
+      </View>
 
       <Text style={styles.hint}>
         Blue + White die sum (2-12). Cross off matching values.
@@ -86,21 +89,27 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
-  cellsContainer: {
+  grid: {
+    alignSelf: 'center',
+  },
+  row: {
     flexDirection: 'row',
-    gap: 8,
-    paddingVertical: 8,
   },
   cell: {
     width: 50,
     height: 50,
     backgroundColor: '#4169E1',
+    margin: 3,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#2A4B9B',
-    position: 'relative',
+  },
+  cellEmpty: {
+    width: 50,
+    height: 50,
+    margin: 3,
   },
   cellCrossed: {
     backgroundColor: '#2A4B9B',
@@ -115,13 +124,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   cellValueCrossed: {
-    color: '#666',
-  },
-  crossMark: {
-    position: 'absolute',
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFD700',
   },
   hint: {
     color: '#666',

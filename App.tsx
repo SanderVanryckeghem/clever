@@ -4,6 +4,7 @@ import { StyleSheet, View, Text } from 'react-native';
 import { GameProvider, useGame } from './src/context/GameContext';
 import { LobbyScreen } from './src/components/screens/LobbyScreen';
 import { GameScreen } from './src/components/screens/GameScreen';
+import { DiceSimulatorScreen } from './src/components/screens/DiceSimulatorScreen';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component<
@@ -39,12 +40,13 @@ class ErrorBoundary extends React.Component<
 }
 
 function AppContent() {
-  const { currentScreen } = useGame();
+  const { currentScreen, goToLobby } = useGame();
 
   return (
     <View style={styles.container}>
       {currentScreen === 'lobby' && <LobbyScreen />}
       {currentScreen === 'game' && <GameScreen />}
+      {currentScreen === 'dice_simulator' && <DiceSimulatorScreen onBack={goToLobby} />}
       <StatusBar style="light" />
     </View>
   );

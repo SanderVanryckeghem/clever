@@ -103,6 +103,14 @@ export const LobbyScreen: React.FC = () => {
           >
             <Text style={styles.menuButtonText}>Join Game</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.menuButton, styles.menuButtonPractice]}
+            onPress={game.goToDiceSimulator}
+          >
+            <Text style={styles.menuButtonText}>Practice Mode</Text>
+            <Text style={styles.menuButtonSubtext}>Dice Simulator</Text>
+          </TouchableOpacity>
         </View>
 
         {error && (
@@ -333,6 +341,14 @@ const styles = StyleSheet.create({
   },
   menuButtonSecondary: {
     backgroundColor: '#228B22',
+  },
+  menuButtonPractice: {
+    backgroundColor: '#8B4513',
+  },
+  menuButtonSubtext: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+    marginTop: 4,
   },
   menuButtonText: {
     color: '#fff',

@@ -88,9 +88,14 @@ export const useMultiplayerDice = (): UseMultiplayerDiceReturn => {
         : { ...die, value: rollDieValue() }
     );
 
+    // Increment roll number when manually rolling (4 means no more rolls available)
+    const newRollNumber = Math.min(diceState.rollNumber + 1, 4) as 1 | 2 | 3 | 4;
+
     return {
       ...diceState,
       dice: newDice,
+      rollNumber: newRollNumber,
+      mustRollBeforeSelect: false, // After rolling, player can select
     };
   }, [canRoll]);
 
@@ -106,10 +111,12 @@ export const useMultiplayerDice = (): UseMultiplayerDiceReturn => {
     }
 
     const selectedValue = selectedDie.value;
-    const newRollNumber = Math.min(diceState.rollNumber + 1, 3) as 1 | 2 | 3;
     const newSilverTray: Die[] = [...diceState.silverTray];
+    const newSelectedCount = diceState.selectedDice.length + 1;
+    const isLastSelection = newSelectedCount >= SELECTIONS_PER_TURN;
 
     // Update dice: mark selected, move lower values to silver tray
+    // Note: Remaining dice are NOT auto-rerolled - player must manually click "Roll Dice"
     const updatedDice = diceState.dice.map((die) => {
       if (die.id === dieId) {
         return { ...die, isSelected: true };
@@ -123,10 +130,13 @@ export const useMultiplayerDice = (): UseMultiplayerDiceReturn => {
         newSilverTray.push(silverTrayDie);
         return silverTrayDie;
       }
-      // Re-roll remaining available dice (if we haven't used all rolls)
-      if (newRollNumber <= ROLLS_PER_TURN) {
-        return { ...die, value: rollDieValue() };
+      // If this is the last (3rd) selection, move ALL remaining dice to silver tray
+      if (isLastSelection) {
+        const silverTrayDie = { ...die, isOnSilverTray: true };
+        newSilverTray.push(silverTrayDie);
+        return silverTrayDie;
       }
+      // Keep remaining dice as-is (no auto-reroll)
       return die;
     });
 
@@ -134,9 +144,10 @@ export const useMultiplayerDice = (): UseMultiplayerDiceReturn => {
 
     return {
       dice: updatedDice,
-      rollNumber: newRollNumber,
+      rollNumber: diceState.rollNumber, // Don't increment - only manual roll increments this
       silverTray: newSilverTray,
       selectedDice: [...diceState.selectedDice, newSelectedDie],
+      mustRollBeforeSelect: true, // After selecting, player must roll before selecting again
     };
   }, []);
 
@@ -186,6 +197,7 @@ export const useMultiplayerDice = (): UseMultiplayerDiceReturn => {
       rollNumber: 1,
       silverTray: [],
       selectedDice: [],
+      mustRollBeforeSelect: false, // Fresh turn with pre-rolled dice, can select immediately
     };
   }, []);
 
